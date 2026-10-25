@@ -1,0 +1,27 @@
+chisquare test of independence: test for categorical variables to see if each variable is independent or depend on the other
+
+Anova & Manouva: Test for countioues (quantitative) variables
+
+
+		Bivariate Analysis
+		==================
+		- Qualitative vs Qualitative
+		- Qualitative vs Quantitative
+		-Quantitative vs Quantitative
+		
+	Scatter plot: The graph tells 
+	
+Relationship consists of:
+	- Direction
+	- Strength
+	
+	
+	linear Model
+	===========
+	The idea behind linear model is to find the value of alpha and betta (& and B) that can give minimum error (e)
+	y = & + Bx + e
+	e = y - (& + Bx)
+	
+	The value is said to be significant iff P < 0.05
+	
+	
