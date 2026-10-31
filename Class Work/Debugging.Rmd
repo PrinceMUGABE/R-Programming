@@ -1,0 +1,76 @@
+---
+title: "Debugging"
+output: html_document
+date: "2026-10-29"
+---
+library(nycflights13)
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r}
+
+
+```
+
+```{r cars}
+summary(cars)
+```
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r}
+library(nycflights13)
+library(tidyverse)
+library(dplyr)
+
+view(flights)
+jan <- filter(flights, month==1)
+jan
+```
+```{r}
+data_10 <- arrange(flights, year, month, day)
+view(data_10)
+```
+```{r}
+time_var<-select(flights, year, month,day)
+select(flights, year:day)
+select(flights, -(year:day))
+```
+
+```{r}
+# creating a new variable
+flights2<-select(flights, year:day, ends_with("delay"), distance, air_time)
+
+
+```
+
+```{r}
+iris %>%
+  filter(Sepal.Width > 3.0) %>%
+  group_by(Species) %>%
+  summarise(
+    max_sepal_length = max(Sepal.Length),
+    flower_count = n()
+  )
+```
+
+
+```{r}
+library(ggplot2)
+data("mtcars")
+mtcars
+dim(mtcars)
+table(mtcars$cyl)
+```
+
+
