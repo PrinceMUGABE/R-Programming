@@ -518,5 +518,37 @@ print(car_analysis)
 ```
 
 
+### 4. Multivariate Functional Iteration: `mapply()`
+
+While `sapply()` and `lapply()` are limited to looping over a single vector at a time, `mapply()` handles multivariate tracking. It passes elements from **multiple vectors simultaneously** into a matching multi-argument user-defined function.
+
+```{r}
+# Define a custom function requiring two distinct criteria inputs
+flag_student_performance <- function(score, year){
+  if (score >= 90 & year == 2024){
+    return("Elite (2024 cohort)")
+  }else if (score >= 85){
+    return("High Performer")
+  }else {
+    return("Standard Performance")
+  }
+}
+
+# Create sample slices from separate database columns to use as vector inputs
+sample_scores <- head(marks_df$score, 5)
+sample_years <- head(student_df$enrollment_year, 5)
+
+
+# Use mapply to loop through both vectors element-by-element in parallel
+performance_flags <- mapply(
+  FUN = flag_student_performance,
+  sample_scores,
+  sample_years
+)
+
+print(performance_flags)
+
+
+```
 
 
