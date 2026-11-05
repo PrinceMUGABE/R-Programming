@@ -1,0 +1,155 @@
+---
+title: "corrections"
+output: html_document
+date: "2026-11-04"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+###  Below are the corrections of the work
+==========================================
+
+###         Step 4.1: Load the librares and data
+
+```{r}
+# Load the tidyverse collection of packages
+# If R says "there is no package called 'tidyverse'", run this once in the console to install the package:
+
+# install.package("tidyverse")
+library(tidyverse)
+```
+
+
+### Import and read datasets
+```{r}
+# Store each dataset file in a variable so it is easy to change in one place
+population_path <- "world_population.csv"
+co2_path <- "CO2_emission.csv"
+
+# Read each CSV into its own tibble (a tidier kind of data frame)
+world_population <- read_csv(population_path)
+co2_emisions <- read_csv(co2_path)
+```
+###   Step 4.2(part1): Inspect the population data, duplicates, missing values
+
+### Confirm if datasets loading worked successfully
+```{r}
+# Dimensions: number of rows and columns
+dim(world_population)
+dim(co2_emisions)
+
+# Column names, data types and a preview of values
+glimpse(world_population)
+glimpse(co2_emisions)
+```
+
+###   1. Variable names, shape and data types
+#           *** names(): lists the column names
+#           *** dim() / nrow() /ncol(): the shape (rows, columns)
+#           *** supply(df, class): applies class() to every column to show its             data type
+
+```{r}
+
+# column names of the population dataset
+names(world_population)
+
+# Shape of the dataset: number of rows and columns
+cat("Rows:", nrow(world_population), "\n")
+cat("Columns:", ncol(world_population), "\n")
+
+# Data type of each column
+sapply(world_population, class)
+```
+#  2. Top 5 and bottom 10 rows
+#       head(x, n): first n rows. *** tail(x, n): last n rows.
+
+```{r}
+# First 5 rows
+head(world_population, n=5)
+
+# Last 10 rows
+tail(world_population, n=10)
+```
+
+# 3.  Duplicate rows
+#       * duplicated() returns TRUE for each row that is an exact copy of an             earlier row. Summing those TRUEs counts the duplicates, because TRUE           counts as 1.
+#        * distinct() (from dplyr) keeps only unique rows
+
+```{r}
+# Count fully duplicated rows
+duplicate_count <- sum(duplicated(world_population))
+cat("Duplicated rows found: ", duplicate_count, "\n")
+
+# Keep only unique rows (does nothing if the count above is 0)
+world_population <- distinct(world_population)
+
+# Confirm the new shape
+dim(world_population)
+```
+
+# 4.  Missing values
+#       is.na() marks each cell TRUE if it is missing. colSums() adds them up          for each column.
+
+```{r}
+# Number of NA values in each column
+missing_per_column <- colSums(is.na(world_population))
+missing_per_column
+
+# Number of empty-string cells in each text column
+blank_per_column <- sapply(world_population, function(column) sum(column == "", na.rm = TRUE))
+blank_per_column
+```
+# 5.   Select the quantitative (measured) measured
+
+```{r}
+# Keep only the quantitative (measured) columns; Rank is an ordering label, not a measurement
+quantitative_data <- worl_population %>%
+  select(where(is.numeric), -Rank)
+
+names(quantitative_data)
+```
+# 6. Box plots
+```{r}
+# Reshape from wide (one column per variable) to long (variable, value)
+population_long <- quantitative_data %>%
+  pivot_longer(cols = everything(),
+               names_to = "variable",
+               values_to = "value")
+
+# One box plot per variable, each with its own y-axis
+ggplot(population_long, aes(x = "", y=value)) +
+  geom_boxplot(fill="steelblue", outlier.colour = "red") +
+  facet_wrap(~ variable, scales = "free") +
+  labs(title = "Box plots of quantitative variables",
+       x = NULL, y = "Value") +
+  theme_minimal()
+```
+# 7.  Count the outliers
+
+```{r}
+# Count values outside the 1.5 IQR fences for one numeric vector
+count_outliers <- function(x){
+  quartiles <- quantile(x, probs = c(0.25, 0.75), na.rm = TRUE)
+  iqr_value <- quartiles[2] - quartiles[1]
+  lower_fence <- quartiles[1] - 1.5 * iqr_value
+  upper_fence <- quartiles[2] + 1.5 * iqr_value
+  sum(x < lower_fence | x > upper_fence, na.rm = TRUE)
+}
+
+# Apply to every quantitative column
+sapply(quantitative_data, count_outliers)
+```
+# 8.  See who the outliers are
+
+```{r}
+# The ten largest populations in 2022
+world_population %>%
+  arrange(desc(`2022 Population`)) %>%
+  select(`Country/Territory`, `2022 Population`, `Area (km`, `Density (per km2)`) %>%
+  head(10)
+```
+

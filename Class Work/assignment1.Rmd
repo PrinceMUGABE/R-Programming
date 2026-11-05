@@ -1,7 +1,12 @@
 # import libraries that help to create a database connection
-llibrary(DBI)
-library(RPostgres)
 
+```{r}
+library(DBI)
+library(RPostgres)
+```
+
+
+```{r}
 # 1. Connect to PostgreSQL database (must already exist)
 # Define your connection parameters
 db_host     <- "localhost"
@@ -10,6 +15,9 @@ db_name     <- "learning_r_database"
 db_user     <- "postgres"
 db_password <- "07288"
 
+```
+
+```{r}
 # Safely attempt to connect
 con <- tryCatch({
   connection <- dbConnect(
@@ -36,7 +44,10 @@ con <- tryCatch({
   # Return NULL so 'con' is explicitly empty
   NULL
 })
+```
 
+
+```{r}
 # 2. Create the 3 relational tables
 dbExecute(con, "
   CREATE TABLE IF NOT EXISTS student (
@@ -62,8 +73,11 @@ dbExecute(con, "
     score INT NOT NULL CHECK (score BETWEEN 0 AND 100)
   );
 ")
+```
+
 
 # 3. Insert base lookup data (Students and Courses)
+```{r}
 # Generate mock student names
 first_names <- c("John", "Mary", "David", "Sarah", "James", "Elena", "Robert", "Linda", "Michael", "Patricia")
 last_names <- c("Smith", "Jones", "Miller", "Davis", "Garcia", "Rodriguez", "Wilson", "Thomas", "Martinez", "Anderson")
@@ -78,12 +92,18 @@ mock_courses <- data.frame(
   course_name = c("Introduction to R", "Database Systems", "Linear Models", "Data Structures", "Machine Learning"),
   credits = c(3, 4, 3, 4, 4)
 )
+```
 
+
+```{r}
 # Write students and courses to DB
 dbWriteTable(con, "student", mock_students, append = TRUE, row.names = FALSE)
 dbWriteTable(con, "course", mock_courses, append = TRUE, row.names = FALSE)
+```
+
 
 # 4. Generate and insert 200 random mark records linking them
+```{r}
 # Fetch the generated database IDs to avoid foreign key violations
 student_ids <- dbGetQuery(con, "SELECT student_id FROM student;")$student_id
 course_ids <- dbGetQuery(con, "SELECT course_id FROM course;")$course_id
@@ -93,19 +113,31 @@ mock_marks <- data.frame(
   course_id = sample(course_ids, 200, replace = TRUE),
   score = sample(50:100, 200, replace = TRUE) # Scores between 50 and 100
 )
+```
 
+
+```{r}
 # Write the 200 records to the marks table
 dbWriteTable(con, "marks", mock_marks, append = TRUE, row.names = FALSE)
 
+```
+
+```{r}
 cat("Database setup complete! Created tables and inserted 200 mock records.\n")
 
+```
 
 
 
+
+```{r}
 # Check if tables created
 print(dbListTables(con))
+```
 
 
+
+```{r}
 # Calling database tables into R
 course_df <- dbReadTable(con, "course")
 (head(course_df))
@@ -115,3 +147,81 @@ student_df <- dbReadTable(con, "student")
 
 marks_df <- dbReadTable(con, "marks")
 (tail(marks_df))
+```
+
+### Accessing Built-in Datasets
+
+```{r}
+# Load the historic 'mtcars' dataset (Motor Trend Car Road Tests)
+data("mtcars")
+
+# Convert it explicitly into a clean data frame structure
+cars_df <- as.data.frame(mtcars)
+
+# Print structural diagonistics
+class(cars_df)
+dim(cars_df)  # Display total number of rows and columns
+head(cars_df, n=3) # Display only first 3 rows
+```
+### 6.  Ingesting Real-Time Data via REST APIs
+In production environments, data scientist frequently pull live web data via REST APIs using HTTP requests.
+
+We utilize the `httr2` library to handle the the requests and `jsonlite` to convert the raw JSON web response into a clean R data frame.
+
+```{r}
+# 1. Clear any cached bad text response from R's global memory
+if (exists("raw_response")) rm(raw_response)
+
+# 2. Load necessary packages
+library(httr2)
+library(jsonlite)
+
+# 3. Define the precise API endpoint (Double-check the "open." prefix)
+api_url <- "https://open.er-api.com/v6/latest/USD"
+
+# 4. Perform the HTTP request and stream the body text
+raw_response <- request(api_url) |>
+  req_perform() |>
+  resp_body_string()
+
+# 5. Diagnostic Check: Print the first 50 characters to verify it is NOT HTML
+cat("Memory Check (First 50 chars):", substr(raw_response, 1, 50), "\n\n")
+
+# 6. Parse the validated JSON string into a structured data frame
+parsed_list <- jsonlite::fromJSON(raw_response)
+rates_df <- data.frame(
+  currency = names(parsed_list$rates),
+  rate_to_usd = as.numeric(parsed_list$rates)
+)
+
+# 7. Print the final clean dataset rows
+head(rates_df, 5)
+
+```
+
+##  Visual Function Mapping Index
+
+Plots are grouped by analytical application rather than function names to streamline code deployment:
+
+### Group A: Distribution Analytics (Single Continuous Variable)
+*   `geom_histogram()`: Continuous block distribution.
+*   `geom_density()`: Continuous smoothed density lines.
+*   `geom_rug()`: Marginal axis distribution tick marks.
+
+### Group B: Categorical & Comparison Analytics
+*   `geom_bar()`: Frequency tracking across absolute categories.
+*   `geom_boxplot()`: Strategic metric variation across groups.
+*   `geom_violin()`: Dual density profile variation across groups.
+
+### Group C: Correlation Analytics (Two Continuous Variables)
+*   `geom_point()`: Standard bivariate scatter arrays.
+*   `geom_jitter()`: Scattered overlay arrays to counter data overlap.
+*   `geom_line()`: Sequential connected data tracking.
+*   `geom_smooth()`: Conditional local trend and regression fits.
+
+### Group D: Structural Annotation Overlays
+*   `geom_text()`: Vector-mapped textual identifiers.
+*   `geom_hline()`: Constant horizontal boundaries.
+*   `geom_vline()`: Constant vertical thresholds.
+
+
