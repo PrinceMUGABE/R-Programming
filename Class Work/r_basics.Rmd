@@ -2,7 +2,10 @@
 title: "Learning R for Data Science & Data Analysis"
 author: "Self-Paced Learning Journey"
 date: "`r Sys.Date()`"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
+subtitle: Basics of R Programming
 ---
 
 ## Purpose of this Learning Journey
@@ -10,7 +13,7 @@ The goal of this workspace is to learn R programming entirely from scratch, spec
 
 ---
 
-## 🗺️ The R Mastery Roadmap
+##  The R Mastery Roadmap
 
 ### Phase 1: Foundation (Current)
 *   [ ] **Module 1.1:** R Basics (Data Types & Assignment Operators)
@@ -101,16 +104,16 @@ R stores all standalone numbers as numeric objects unless instructed otherwise.
 *** Integer: Limited to discrete whole numbers. Appending a trailing `L` restricts storage to 4-byte whole integers, optimizing execution speeds and memory utilization during large-scale computation loops.
 
 ```{r}
-num_val <- 500
-int_val <- 500L
+num_var <- 500
+int_var <- 500L
 
 # verify types
 class(num_var)
-class(int_val)
+class(int_var)
 
 # Check the memory allocation difference in bytes
-object.size(num_val)
-object.size(int_val)
+object.size(num_var)
+object.size(int_var)
 ```
 
 ### Module 1.2  Essential Data Structures
@@ -180,6 +183,6 @@ data_frame <- data.frame(
 
 # target_column does not exist independent outside the table;
 # running the line below will generate an internal error:
-target_column
+#target_column
 ```
     

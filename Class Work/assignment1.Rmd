@@ -1,3 +1,11 @@
+
+---
+title: "Learning R for Data Science & Data Analysis"
+author: "Self-Paced Learning Journey"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
 # import libraries that help to create a database connection
 
 ```{r}
@@ -30,7 +38,7 @@ con <- tryCatch({
   )
   
   # If successful, print a clear visual confirmation
-  cat("[STATUS] Database connected successfully! ✅\n")
+  cat("[STATUS] Database connected successfully! n")
   cat("Connected to:", db_name, "on host:", db_host, "\n\n")
   
   # Return the connection object to the variable 'con'
@@ -38,7 +46,7 @@ con <- tryCatch({
   
 }, error = function(e) {
   # If an error happens, print a failure message instead of crashing
-  cat("[STATUS] Database is NOT connected. ❌\n")
+  cat("[STATUS] Database is NOT connected. n")
   cat("Error details:", e$message, "\n\n")
   
   # Return NULL so 'con' is explicitly empty
@@ -299,13 +307,15 @@ ggplot(data = cars_df, aes(x = as.factor(cyl), y = mpg)) +
 We use these functions to evaluate relationships between two numeric columns. `geom_point()` maps exact coordinates, `geom_jitter()` prevents overlapping points from hiding data density, and `geom_smooth()` fits trend lines.
 
 ```{r}
+library(ggplot2)
+
 # 1.  Scatter plot combining points and linear trend line using car data
 ggplot(data = cars_df, aes(x = wt, y = mpg)) +
-  geom_point( color = "blue", size = 2) +
+  geom_point(color = "blue", size = 2) + 
   geom_smooth(method = "lm", color = "red", se = FALSE)
 
 # 2.  Jitter plot showing dense database score points across categories without stacking
-ggplot(data = merged_marks, aes(x = course_name), y = score) +
+ggplot(data = merged_marks, aes(x = course_name, y = score)) +
   geom_jitter(color = "darkorange", width = 0.2, alpha = 0.6)
 ```
 
@@ -365,4 +375,17 @@ ggplot(data = cars_df, aes(x = wt, y = mpg)) +
     caption = "Source: Motor Trend Car Road Tests | R Learning Journey"
   )
 ```
+
+---
+
+## Phase 2.1: Data Wrangling with `dplyr`
+
+Data wrangling involves filtering rows, selecting columns, creating new attributes, and sorting observations. We will utilize three fundamental functions to isolate precise subsets of our data:
+*   `filter()`: Extracts rows based on a logical condition (e.g., scores > 80).
+*   `select()`: Isolates specific columns by name, removing unnecessary variables.
+*   `arrange()`: Sorts rows based on values in a specified column (ascending or descending).
+
+### 1. Conditional Row Extraction: `filter()`
+
+The `filter()` function checks a column and keeps only the rows where our condition evaluates to `TRUE`. We chain this immediately after our dataset using the native pipe operator `|>`.
 
