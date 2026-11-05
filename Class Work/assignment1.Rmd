@@ -389,3 +389,134 @@ Data wrangling involves filtering rows, selecting columns, creating new attribut
 
 The `filter()` function checks a column and keeps only the rows where our condition evaluates to `TRUE`. We chain this immediately after our dataset using the native pipe operator `|>`.
 
+
+```{r}
+library(dplyr)
+
+# Isolate all records from the marks database table where the score is 90 or above
+high_score_df <- marks_df |>
+  filter(score >= 90)
+
+# Print structural metrics to verify the row filtering
+dim(marks_df) # Original row count (200)
+dim(high_score_df)  # New filtered row count
+head(high_score_df, 5)
+```
+
+### 2. Column Selection and Sorting: `select()` and `arrange()`
+
+We string multiple operations together in a single pipeline. First, we filter the data; second, we use `select()` to keep only the student ID and score columns; third, we use `arrange(desc())` to sort the list with the highest score at the very top.
+
+```{r}
+# Build a sorted leaderboard showing only specific columns
+markes_leaderboard <- marks_df |>
+  filter(score >= 85) |>
+  select(student_id, score) |>
+  arrange(desc(score))
+
+
+# Print the top 5 records of the processed leaderboard
+head(markes_leaderboard)
+```
+
+---
+
+# Phase 2.2: User-Defined Functions & Functional Programming
+
+### 1. Predefined vs. User-Defined Functions (UDFs)
+
+A **predefined function** is built into R (e.g., `mean()`, `class()`). A **user-defined function** is a custom pipeline you build to execute repetitive tasks. 
+
+A function structure contains three parts:
+1.  **Arguments:** The inputs passed into your function.
+2.  **Body:** The actual operations executed behind the scenes.
+3.  **Return Statement:** The final output sent back to your environment.
+
+```{r}
+# Define a custom function to classify scores into Pass/Fail categories
+classify_performance <- function(student_score){
+  if (student_score >= 70){
+    return("Pass")
+  }else{
+    return("Fail")
+  }
+}
+
+# Test new function on a standalone value
+classify_performance(85)
+classify_performance(56)
+```
+
+### 2. The Functional Iteration Family (`lapply`, `sapply`, `tapply`)
+
+Loops can be slow and hard to read in data science. R uses the `apply` family to map a function over elements of an object efficiently.
+
+*   `lapply()`: Loops over a vector or list and returns a **List**.
+*   `sapply()`: Loops over an object and simplifies the output into a flat **Vector**.
+*   `tapply()`: Computes a function on a continuous variable **grouped by a categorical factor** (highly useful for group summaries).
+
+```{r}
+# A.  Vector to vector Mapping with spply()
+# Take the first 5 scores from the database and check their pass/fail status
+sample_scores <- head(marks_df$score, 5)
+pass_fail_vector <- sapply(sample_scores, classify_performance)
+print(pass_fail_vector)
+
+# B.  Vector to List Mapping with lapply
+pass_fail_list <- lapply(sample_scores, classify_performance)
+print(pass_fail_list)
+
+# C.  Grouped Aggregation with tapply
+# Calculate the average database score GROUPED by each course ID
+average_by_course <- tapply(marks_df$score, marks_df$course_id, mean)
+print(average_by_course)
+```
+
+### 3. Advanced UDF: Automated Statistical Testing (Two-Sample t-Test)
+
+A **Two-Sample t-Test** evaluates whether the means of two independent numeric groups are statistically different from each other. 
+
+Let's build a complex user-defined function. It will take a data frame, extract two specific categorical groups, execute a predefined `t.test()`, and extract a clean statement about whether the difference is statistically significant (based on a p-value threshold of 0.05).
+
+```{r}
+# Define a robust function to compare car fuel effiencies across 4 vs 6 cylinder engines
+run_custom_ttest <- function(dataset, continuous_var, categorical_var, group_a, group_b){
+  # Step A: Filter out the two targeted comparion groups using matrix indexing
+  data_group_1 <- dataset[dataset[[categorical_var]] == group_a, continuous_var]
+  data_group_2 <- dataset[dataset[[categorical_var]] == group_b, continuous_var]
+  
+  #Step B: Run R's predefined t-test function
+  test_result <- t.test(data_group_1, data_group_2)
+  
+  # Step C: Extract the p-value
+  extracted_p_value <- test_result$p.value
+  
+  # Step D: Apply conditional formatting to deliver a clear plain-text answer
+  if (extracted_p_value < 0.05){
+    conclusion <- "Significant DIfference: The groups are statistically distinct"
+  }else{
+    conclusion = "No Significant Diffence: Observed variations are likely due to chance"
+  }
+  
+  # Return a comprehnsive list summary of our results
+  return(list(
+    p_value = extracted_p_value,
+    evaluation = conclusion
+  ))
+}
+
+# Run the custom function on the mtcars dataset comparing 4-cylinder vs 6-cylinder cars
+car_analysis <- run_custom_ttest(
+  dataset = cars_df,
+  continuous_var = "mpg",
+  categorical_var = "cyl",
+  group_a = 4,
+  group_b = 6
+)
+
+print(car_analysis)
+```
+
+
+
+
