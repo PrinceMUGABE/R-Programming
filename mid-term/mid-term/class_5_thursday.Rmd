@@ -1,0 +1,66 @@
+---
+title: "class_5_thursday"
+output: html_document
+date: "2026-11-05"
+---
+
+```{r}
+log(-5)
+```
+
+```{r}
+check_value_of_n <- function(x){
+  if (x > 0){
+    print(paste(x, "Greater than zero"))
+  }else{
+    print(paste(x, "is less or equal to zero"))
+  }
+}
+
+
+check_value_of_n(0)
+```
+
+
+```{r}
+check_n <- function(x){
+  if (is.na(x)){
+    print("Missing value of number to be checked")
+  }else if(x > 0){
+    print(paste(x, "is greater than zeo"))
+  }else{
+    print(paste(x, "is less or equal to zero"))
+  }
+}
+
+check_n(NA)
+```
+
+
+```{r}
+# Allowing a function to accept a vector and check for each element
+number_sign_4 <- Vectorize(check_n)
+
+number_sign_4(c(6,8,3,0.-4))
+```
+
+
+
+```{r}
+
+quadratic_function <- function(a, b, c){
+
+  delt = b*b-(4*a*c)
+  x1 = (-b +sqrt(delt)) / 2 * a
+  x2 = (-b -sqrt(delt)) / 2 * a
+  
+  print(paste("The value of  x1 is", x1))
+  print(paste("The value of  x2 is", x2))
+  
+}
+
+
+```
+
+
+
