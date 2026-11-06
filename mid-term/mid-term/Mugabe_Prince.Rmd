@@ -1,0 +1,966 @@
+---
+title: "Population Growth and CO2 Emissions: Exploratory and Correlation Analysis"
+author: "Prince Mugabe"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    theme: flatly
+    code_folding: show
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+# Global chunk options: show code, hide package start-up messages and warnings,
+# and use one consistent figure size across the whole report.
+knitr::opts_chunk$set(
+  echo       = TRUE,
+  message    = FALSE,
+  warning    = FALSE,
+  fig.align  = "center",
+  fig.width  = 8,
+  fig.height = 5,
+  out.width  = "90%"
+)
+```
+
+# Project Overview
+
+## Context
+
+This project studies the relationship between **population** and **CO2 emissions** using two public datasets:
+
+| Dataset | Content | Unit of analysis |
+|---|---|---|
+| World Population Dataset (Kaggle) | Population by year (1970-2022), area, density, growth rate, world share, continent | Country / territory |
+| CO2 Emissions Around the World (Kaggle, World Bank indicator) | CO2 emissions in **metric tons per capita**, 1990-2019 | Country |
+
+## Objectives
+
+1. Apply data-management skills: loading, cleaning, reshaping and merging.
+2. Perform exploratory data analysis (structure, duplicates, missing values, outliers).
+3. Derive new variables from existing ones (2030 projection, total emissions).
+4. Visualise population and emission trends with `ggplot2`.
+5. Quantify relationships through correlation analysis and regression.
+
+## Reproducibility note
+
+Place `world_population.csv` and `CO2_emission.csv` in the same folder as this `.Rmd` file. Required packages: `tidyverse` and `knitr`. If a package is missing, install it once from the console with `install.packages("tidyverse")`.
+
+**Conventions used throughout:**
+
+* Column names that contain spaces or symbols are written between backticks, for example `` `2022 Population` ``.
+* Key values quoted in the text are computed with inline R code wherever possible, so the narrative stays consistent with the output.
+
+---
+
+# Task 4.1: Loading the Data
+
+## Packages and global settings
+
+The `tidyverse` bundle provides `readr` (import), `dplyr` (data manipulation), `tidyr` (reshaping) and `ggplot2` (graphics). Loading everything once at the top makes all dependencies visible to the reader.
+
+```{r libraries}
+library(tidyverse)   # data import, wrangling and plotting
+library(knitr)       # kable() for clean tables
+
+# One consistent plot theme for the whole report
+theme_set(theme_minimal(base_size = 12))
+```
+
+## Importing the datasets
+
+File paths are stored in variables so they can be changed in a single place. `read_csv()` (from `readr`) is used instead of base `read.csv()` because it is faster, returns a tibble, and preserves the original column names (for example `2022 Population`) instead of rewriting them.
+
+```{r import-data}
+# File locations (relative to the project folder)
+population_path <- "world_population.csv"
+co2_path        <- "CO2_emission.csv"
+
+# Read each CSV into its own tibble
+world_population <- read_csv(population_path, show_col_types = FALSE)
+co2_emissions    <- read_csv(co2_path,        show_col_types = FALSE)
+```
+
+## Verifying the import
+
+Before any analysis, confirm that both files loaded with the expected shape. This protects against silent import problems (wrong delimiter, truncated file, shifted headers).
+
+```{r verify-import}
+# Dimensions of each dataset
+import_summary <- tibble(
+  dataset = c("World population", "CO2 emissions"),
+  rows    = c(nrow(world_population), nrow(co2_emissions)),
+  columns = c(ncol(world_population), ncol(co2_emissions))
+)
+kable(import_summary, caption = "Dimensions of the imported datasets")
+```
+
+```{r glimpse-population}
+# Column names, types and a preview of the population data
+glimpse(world_population)
+```
+
+```{r glimpse-co2}
+# Column names, types and a preview of the CO2 data
+glimpse(co2_emissions)
+```
+
+**Observation.** The CO2 file contains the year 2019 **twice** (`2019...34` and `2019...35`; `read_csv()` renames duplicated headers to keep them distinguishable). The next section handles this. The CO2 values are expressed in **metric tons per capita**, not national totals, which matters for the interpretation later.
+
+## Preliminary data preparation
+
+Two preparation steps are applied once, here, so that every later chunk uses the final column names.
+
+**(a) Remove the duplicated 2019 CO2 column.** A safeguard (`stopifnot`) first verifies that the two columns are truly identical, so no information is lost by dropping one.
+
+```{r clean-co2-duplicate}
+# Stop with an error if the two 2019 columns are NOT identical
+stopifnot(identical(co2_emissions$`2019...34`, co2_emissions$`2019...35`))
+
+# Keep one copy and restore the clean name "2019"
+co2_emissions <- co2_emissions %>%
+  select(-`2019...35`) %>%
+  rename(`2019` = `2019...34`)
+
+cat("CO2 dataset now has", ncol(co2_emissions), "columns.\n")
+```
+
+**(b) Rename two awkward population columns.** `Area (km²)` and `Density (per km²)` contain a superscript character that is hard to type. `starts_with()` selects them without typing that character.
+
+```{r rename-columns}
+world_population <- world_population %>%
+  rename(area_km2    = starts_with("Area"),
+         density_km2 = starts_with("Density"))
+
+names(world_population)
+```
+
+---
+
+# Task 4.2: Exploratory Data Analysis
+
+All steps in this section use the **World Population Dataset**.
+
+## Structure of the dataset
+
+### Variable names, shape and data types
+
+```{r structure}
+# Shape of the dataset
+cat("Rows:   ", nrow(world_population), "\n")
+cat("Columns:", ncol(world_population), "\n")
+
+# Data type of every column (first class label of each column)
+column_types <- tibble(
+  variable  = names(world_population),
+  data_type = map_chr(world_population, ~ class(.x)[1])
+)
+kable(column_types, caption = "Variable names and data types")
+```
+
+The dataset has four text variables (`CCA3`, `Country/Territory`, `Capital`, `Continent`) and thirteen numeric variables. `Rank` is the population rank of each country, so it is an ordering label rather than a measurement.
+
+### First 5 and last 10 rows
+
+Inspecting both ends of the file shows how it is sorted and reveals stray rows such as totals or footnotes.
+
+```{r head-tail}
+# First 5 rows
+head(world_population, n = 5)
+
+# Last 10 rows
+tail(world_population, n = 10)
+```
+
+The data are sorted alphabetically by country (Afghanistan ... Zimbabwe). No totals row or footer is present.
+
+## Duplicate rows
+
+`duplicated()` flags every row that exactly repeats an earlier row. Because `TRUE` counts as 1, summing the flags gives the number of duplicates. `distinct()` then keeps unique rows only (a no-op if none exist).
+
+```{r duplicates}
+duplicate_count <- sum(duplicated(world_population))
+cat("Duplicated rows found:", duplicate_count, "\n")
+
+# Keep only unique rows
+world_population <- distinct(world_population)
+
+cat("Dimensions after de-duplication:",
+    nrow(world_population), "rows x", ncol(world_population), "columns\n")
+```
+
+## Missing values
+
+Two kinds of missingness are checked: true `NA` values, and empty text cells (`""`), which are a common hidden form of missing data.
+
+```{r missing-values}
+missing_summary <- tibble(
+  variable    = names(world_population),
+  na_count    = colSums(is.na(world_population)),
+  blank_count = map_int(world_population,
+                        ~ if (is.character(.x)) sum(.x == "", na.rm = TRUE) else 0L)
+)
+
+kable(missing_summary, caption = "Missing values per column")
+cat("Total NA cells:   ", sum(missing_summary$na_count), "\n")
+cat("Total blank cells:", sum(missing_summary$blank_count), "\n")
+```
+
+**Decision.** The dataset contains no missing values, so neither deletion nor imputation is required.
+
+## Outlier detection
+
+### Selecting the quantitative variables
+
+`Rank` is excluded because it is an ordering label, not a measured quantity.
+
+```{r select-quantitative}
+quantitative_data <- world_population %>%
+  select(where(is.numeric), -Rank)
+
+names(quantitative_data)
+```
+
+### Box plots
+
+The variables are on very different scales (populations in the hundreds of millions, growth rate close to 1). A single shared axis would flatten the small-valued variables, so the data are reshaped to long format and plotted in separate panels with free y-axes. Red points lie beyond the whiskers (more than 1.5 x IQR outside the quartiles).
+
+```{r boxplots, fig.height=8}
+# Wide -> long: one row per (variable, value) pair
+population_long <- quantitative_data %>%
+  pivot_longer(cols      = everything(),
+               names_to  = "variable",
+               values_to = "value") %>%
+  mutate(variable = factor(variable, levels = names(quantitative_data)))
+
+ggplot(population_long, aes(x = "", y = value)) +
+  geom_boxplot(fill = "steelblue", outlier.colour = "red") +
+  facet_wrap(~ variable, scales = "free", ncol = 4) +
+  labs(title = "Box plots of the quantitative variables",
+       x = NULL, y = "Value")
+```
+
+### Counting outliers
+
+The box-plot rule is implemented as two small reusable functions: one computes the fences (Q1 - 1.5 IQR and Q3 + 1.5 IQR), the other counts the values outside them.
+
+```{r outlier-functions}
+# Lower and upper outlier fences for a numeric vector
+iqr_fences <- function(x) {
+  q   <- quantile(x, probs = c(0.25, 0.75), na.rm = TRUE)
+  iqr <- q[[2]] - q[[1]]
+  c(lower = q[[1]] - 1.5 * iqr,
+    upper = q[[2]] + 1.5 * iqr)
+}
+
+# Number of values outside the fences
+count_outliers <- function(x) {
+  fences <- iqr_fences(x)
+  sum(x < fences[["lower"]] | x > fences[["upper"]], na.rm = TRUE)
+}
+
+outlier_summary <- tibble(
+  variable   = names(quantitative_data),
+  n_outliers = unname(map_int(quantitative_data, count_outliers))
+) %>%
+  mutate(percent_of_countries = round(100 * n_outliers / nrow(quantitative_data), 1))
+
+kable(outlier_summary, caption = "Outliers per variable (1.5 x IQR rule)")
+```
+
+### Who are the outliers?
+
+Before deciding how to treat outliers, it is essential to see which observations they are.
+
+```{r top10-inspection}
+# The ten largest populations: they drive most population, area and share outliers
+world_population %>%
+  arrange(desc(`2022 Population`)) %>%
+  select(`Country/Territory`, `2022 Population`, area_km2, density_km2) %>%
+  head(10) %>%
+  kable(format.args = list(big.mark = ","),
+        caption = "Ten most populous countries, 2022")
+```
+
+The growth rate is not naturally skewed, so its three outliers deserve a closer look.
+
+```{r growth-outliers}
+growth_fences <- iqr_fences(world_population$`Growth Rate`)
+
+world_population %>%
+  filter(`Growth Rate` < growth_fences[["lower"]] |
+         `Growth Rate` > growth_fences[["upper"]]) %>%
+  select(`Country/Territory`, Continent, `Growth Rate`, `2022 Population`) %>%
+  kable(format.args = list(big.mark = ","),
+        caption = "Growth-rate outliers")
+```
+
+### Outlier treatment decision
+
+**All outliers are retained.**
+
+* The extreme values are **genuine**, not data-entry errors: China and India have over 1.4 billion people, Russia and Canada have very large areas, and city-states such as Macau and Singapore have extreme densities.
+* The three growth-rate outliers (Moldova, Poland, Ukraine) are all European and consistent with refugee movements in 2022: Ukraine's population fell (growth rate below 1), while Poland and Moldova received large inflows.
+* Removing them would delete exactly the countries the later tasks focus on (the ten most populous countries).
+* Instead of deleting them, their influence is reduced analytically: **log scales** in plots and **Spearman rank correlation** alongside Pearson.
+
+---
+
+# Task 4.3: Population Projection for 2030
+
+## Method
+
+Population growth is modelled with continuous compounding:
+
+$$N_t = P \, e^{rt}$$
+
+| Symbol | Meaning | Source in the data |
+|---|---|---|
+| $P$ | Population at the end of 2022 | `2022 Population` |
+| $t$ | Years ahead (2030 - 2022 = 8) | computed |
+| $r$ | Continuous growth rate | derived from `Growth Rate` |
+
+**Important:** the `Growth Rate` column holds yearly **multipliers** (1.0257 means +2.57% per year), not rates. Using it directly as $r$ would inflate populations enormously. Since one year of continuous growth multiplies the population by $e^r$, we solve $e^r = \text{Growth Rate}$, giving
+
+$$r = \ln(\text{Growth Rate})$$
+
+In R, `log()` is the natural logarithm. The shortcut $r \approx \text{Growth Rate} - 1$ is only an approximation; `log()` matches the formula exactly.
+
+## Implementation
+
+The time frame is stored in variables rather than hard-coded. A guard confirms that all multipliers are positive, a requirement for `log()`.
+
+```{r projection-setup}
+base_year       <- 2022
+projection_year <- 2030
+years_ahead     <- projection_year - base_year   # t = 8
+
+# log() is only defined for positive values
+stopifnot(all(world_population$`Growth Rate` > 0))
+
+summary(world_population$`Growth Rate`)
+```
+
+`mutate()` adds the new columns, and a later line may use a column created on an earlier line. Inside `mutate()` new columns are named with `=`, not `<-`.
+
+```{r projection-compute}
+world_population <- world_population %>%
+  mutate(
+    # r: continuous growth rate, from e^r = Growth Rate
+    growth_rate_r = log(`Growth Rate`),
+
+    # N_t = P * e^(r * t), rounded because people are whole numbers
+    population_30 = round(`2022 Population` * exp(growth_rate_r * years_ahead))
+  )
+```
+
+## Checking the result
+
+A derived variable should never be trusted without verification.
+
+```{r projection-check-top10}
+world_population %>%
+  arrange(desc(`2022 Population`)) %>%
+  select(`Country/Territory`, `2022 Population`, `Growth Rate`,
+         growth_rate_r, population_30) %>%
+  head(10) %>%
+  kable(digits = 4, format.args = list(big.mark = ","),
+        caption = "Projected 2030 population, ten most populous countries")
+```
+
+```{r projection-check-outliers}
+world_population %>%
+  filter(`Country/Territory` %in% c("Ukraine", "Poland", "Moldova")) %>%
+  select(`Country/Territory`, `2022 Population`, `Growth Rate`,
+         growth_rate_r, population_30) %>%
+  kable(digits = 4, format.args = list(big.mark = ","),
+        caption = "Projection for the growth-rate outliers")
+```
+
+```{r projection-world-total}
+total_2022 <- sum(world_population$`2022 Population`)
+total_2030 <- sum(world_population$population_30)
+pct_change <- round((total_2030 / total_2022 - 1) * 100, 2)
+
+cat("World population 2022:", format(total_2022, big.mark = ","), "\n")
+cat("Projected 2030:       ", format(total_2030, big.mark = ","), "\n")
+cat("Increase:             ", pct_change, "%\n")
+```
+
+## Interpretation
+
+* The projected world population grows from **`r format(total_2022, big.mark = ",")`** (2022) to **`r format(total_2030, big.mark = ",")`** (2030), an increase of **`r pct_change`%**, which is roughly 0.9% per year and consistent with the global growth rate of 2022.
+* Countries with a growth multiplier below 1 receive a **negative** $r$ and shrink (for example Russia); countries above 1 grow.
+* China's growth rate in the dataset is 1.0000, so $r = 0$ and its projection equals its 2022 population. This is the formula working as specified, but it reflects rounding in the source data.
+* **Caveat.** The formula assumes the 2022 growth rate persists for eight years. For Ukraine, Poland and Moldova the 2022 rates reflect a one-off shock, so their mechanical projections (Ukraine roughly halves) are not realistic forecasts and should be read with caution.
+
+---
+
+# Task 4.4: Value Extraction and Plots
+
+## Top ten most populous countries
+
+The top ten are extracted once and stored, so all three plots use exactly the same countries.
+
+```{r top10}
+top10_countries <- world_population %>%
+  arrange(desc(`2022 Population`)) %>%
+  slice_head(n = 10)
+
+top10_countries$`Country/Territory`
+```
+
+## Plot 1: Population in 2022
+
+A bar chart suits comparing one quantity across categories.
+
+* `reorder()` sorts the bars by population instead of alphabetically.
+* `coord_flip()` draws horizontal bars so country names stay readable.
+* Dividing by one million puts the axis in millions, which is easier to read than scientific notation.
+
+```{r plot-top10-bar}
+ggplot(top10_countries,
+       aes(x = reorder(`Country/Territory`, `2022 Population`),
+           y = `2022 Population` / 1e6)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Top 10 most populous countries, 2022",
+       x = NULL,
+       y = "Population (millions)")
+```
+
+China and India each exceed 1.4 billion people, more than four times the third-ranked country (the United States).
+
+## Plot 2: Population trend, 1990-2022
+
+A line chart suits change over time. The dataset only contains selected years (1990, 2000, 2010, 2015, 2020, 2022), so each observation is marked with a point; the lines between points are **interpolation**, not yearly data.
+
+`pivot_longer()` converts the year columns into rows (country, year, population), the shape `ggplot2` requires, and `names_pattern` extracts the four-digit year from names such as `1990 Population`.
+
+```{r reshape-trend}
+top10_trend <- top10_countries %>%
+  select(`Country/Territory`,
+         `1990 Population`, `2000 Population`, `2010 Population`,
+         `2015 Population`, `2020 Population`, `2022 Population`) %>%
+  pivot_longer(cols          = -`Country/Territory`,
+               names_to      = "year",
+               names_pattern = "(\\d{4}) Population",
+               values_to     = "population") %>%
+  mutate(year = as.integer(year))   # numeric year for a continuous x-axis
+
+head(top10_trend)
+```
+
+China and India would dominate a linear axis and flatten the other eight countries, so a **logarithmic y-axis** is used. On this scale, equal vertical distances mean equal *percentage* changes.
+
+```{r plot-population-trend}
+ggplot(top10_trend,
+       aes(x = year, y = population / 1e6, colour = `Country/Territory`)) +
+  geom_line(linewidth = 1) +
+  geom_point() +
+  scale_y_log10() +
+  scale_colour_brewer(palette = "Paired") +
+  labs(title    = "Population trend of the 10 most populous countries, 1990-2022",
+       subtitle = "Log scale on the y-axis",
+       x = "Year",
+       y = "Population (millions, log scale)",
+       colour = "Country")
+```
+
+To quantify what the plot shows, the table below reports each country's growth factor between 1990 and 2022.
+
+```{r growth-factor}
+top10_countries %>%
+  transmute(country       = `Country/Territory`,
+            pop_1990      = `1990 Population`,
+            pop_2022      = `2022 Population`,
+            growth_factor = pop_2022 / pop_1990) %>%
+  arrange(desc(growth_factor)) %>%
+  kable(digits = 2, format.args = list(big.mark = ","),
+        caption = "Population growth factor, 1990 to 2022")
+```
+
+**Interpretation.** All ten countries grew between 1990 and 2022, except Russia, whose population stayed roughly flat. Nigeria and Pakistan show the steepest relative growth, India closes most of the gap with China, and China's curve is flattening.
+
+## Plot 3: CO2 emission trend of the top ten
+
+### Matching countries by code
+
+Country **names** can differ between datasets (for example "Russia" versus "Russian Federation"), whereas the three-letter ISO code is a stable key. It is called `CCA3` in the population data and `country_code` in the CO2 data.
+
+```{r co2-top10-filter}
+top10_codes <- top10_countries$CCA3
+
+co2_top10 <- co2_emissions %>%
+  filter(country_code %in% top10_codes)
+
+# Integrity checks: all 10 countries found, none missing
+stopifnot(nrow(co2_top10) == 10)
+stopifnot(length(setdiff(top10_codes, co2_emissions$country_code)) == 0)
+cat("All 10 countries were matched in the CO2 data.\n")
+```
+
+### Reshaping and labelling
+
+```{r co2-top10-reshape}
+co2_top10_long <- co2_top10 %>%
+  select(country_code, `1990`:`2019`) %>%
+  pivot_longer(cols      = `1990`:`2019`,
+               names_to  = "year",
+               values_to = "co2_per_capita") %>%
+  mutate(year = as.integer(year)) %>%
+  # Attach the country names used in the population dataset
+  left_join(select(top10_countries, CCA3, `Country/Territory`),
+            by = c("country_code" = "CCA3"))
+
+cat("Missing CO2 values among the top 10:", sum(is.na(co2_top10_long$co2_per_capita)), "\n")
+```
+
+### Plot
+
+The six low-emitting countries would overlap on a linear axis, so a log scale is used again.
+
+```{r plot-co2-trend}
+ggplot(co2_top10_long,
+       aes(x = year, y = co2_per_capita, colour = `Country/Territory`)) +
+  geom_line(linewidth = 1) +
+  scale_y_log10() +
+  scale_colour_brewer(palette = "Paired") +
+  labs(title    = "CO2 emissions per capita of the 10 most populous countries, 1990-2019",
+       subtitle = "Metric tons per person (not national totals); log scale on the y-axis",
+       x = "Year",
+       y = "CO2 emissions (metric tons per capita, log scale)",
+       colour = "Country")
+```
+
+**Interpretation.**
+
+* The **United States** is the highest emitter per person throughout (about 19-20 tons around 2000) and declines to roughly 15 tons by 2019.
+* **Russia** drops from about 14.5 to about 10 tons in the 1990s, then partly recovers.
+* **China** shows the largest rise, from roughly 2 to over 7.5 tons per person (about fourfold), overtaking Mexico around 2006.
+* **Bangladesh** has the steepest relative increase (roughly fivefold) but remains among the lowest emitters, at about 0.5 tons per person, similar to Nigeria.
+* Values are per capita. A country can have large total emissions and modest per-person emissions (China), which is why the next sections also use total emissions.
+
+---
+
+# Task 4.5: Correlation Analysis
+
+## Part 1: Area, Density, Growth Rate and World Population Percentage
+
+`cor()` computes correlations. Two methods are used:
+
+* **Pearson** measures *linear* association and is sensitive to extreme values.
+* **Spearman** works on *ranks* and measures *monotonic* association, so it is robust to the outliers that were deliberately retained.
+
+```{r correlation-matrices}
+corr_data <- world_population %>%
+  select(area_km2, density_km2, `Growth Rate`, `World Population Percentage`)
+
+cor_pearson  <- cor(corr_data, method = "pearson",  use = "complete.obs")
+cor_spearman <- cor(corr_data, method = "spearman", use = "complete.obs")
+
+kable(round(cor_pearson, 3),  caption = "Pearson correlation matrix")
+kable(round(cor_spearman, 3), caption = "Spearman correlation matrix")
+```
+
+### Heatmaps
+
+Each matrix is converted to long format by a small helper function and labelled with its method, so both can be drawn side by side. Fixing the factor order makes both axes list the variables in the same order.
+
+```{r correlation-heatmaps, fig.width=10, fig.height=5}
+# Matrix -> long data frame with a "method" label
+make_cor_long <- function(cor_matrix, method_name) {
+  as.data.frame(cor_matrix) %>%
+    rownames_to_column(var = "variable_1") %>%
+    pivot_longer(cols = -variable_1,
+                 names_to  = "variable_2",
+                 values_to = "correlation") %>%
+    mutate(method = method_name)
+}
+
+cor_both <- bind_rows(
+  make_cor_long(cor_pearson,  "Pearson"),
+  make_cor_long(cor_spearman, "Spearman")
+)
+
+# Same variable order on both axes
+var_order <- colnames(cor_pearson)
+cor_both <- cor_both %>%
+  mutate(variable_1 = factor(variable_1, levels = var_order),
+         variable_2 = factor(variable_2, levels = rev(var_order)))
+
+ggplot(cor_both, aes(x = variable_1, y = variable_2, fill = correlation)) +
+  geom_tile(colour = "white") +
+  geom_text(aes(label = round(correlation, 2))) +
+  scale_fill_gradient2(low = "firebrick", mid = "white", high = "steelblue",
+                       midpoint = 0, limits = c(-1, 1)) +
+  facet_wrap(~ method) +
+  labs(title = "Correlation heatmaps: Pearson vs Spearman",
+       x = NULL, y = NULL, fill = "Correlation") +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+```
+
+### Interpretation
+
+**Pearson** shows only one notable pair: Area and World Population Percentage (0.45). All other pairs are close to zero (absolute value 0.07 or less), which would suggest the variables are unrelated.
+
+**Spearman** shows that this conclusion would be wrong. The table below places both coefficients side by side for every pair of variables, sorted from the strongest to the weakest rank correlation. It is built directly from the two matrices above, so the values always match the output.
+
+```{r correlation-pairs-table}
+# All unique pairs of the four variables (6 pairs, no repeats, no self-pairs)
+variable_pairs <- combn(colnames(cor_pearson), 2, simplify = FALSE)
+
+# Short display names for the table
+display_names <- c(
+  "area_km2"                    = "Area",
+  "density_km2"                 = "Density",
+  "Growth Rate"                 = "Growth Rate",
+  "World Population Percentage" = "World Population %"
+)
+
+# Plain-language reading of each pair, in the same order as combn() produces:
+# Area-Density, Area-Growth, Area-World %, Density-Growth, Density-World %, Growth-World %
+readings <- c(
+  "Moderate negative: larger countries tend to be less dense",
+  "Weak to moderate positive",
+  "Strong positive: larger countries hold larger population shares",
+  "Weak negative",
+  "Very weak negative",
+  "Weak positive"
+)
+
+pair_table <- tibble(
+  var_1 = map_chr(variable_pairs, 1),
+  var_2 = map_chr(variable_pairs, 2)
+) %>%
+  mutate(
+    Pair     = paste(display_names[var_1], "vs", display_names[var_2]),
+    Pearson  = cor_pearson[cbind(var_1, var_2)],    # look up each pair in the matrix
+    Spearman = cor_spearman[cbind(var_1, var_2)],
+    Reading  = readings
+  ) %>%
+  arrange(desc(abs(Spearman))) %>%
+  select(Pair, Pearson, Spearman, Reading)
+
+kable(pair_table, digits = 2, align = c("l", "r", "r", "l"),
+      caption = "Pearson versus Spearman correlation for each pair of variables")
+```
+
+**Key points**
+
+* **Area and World Population Percentage:** Pearson 0.45, but Spearman **0.84**. Larger countries clearly tend to hold larger population shares.
+* **Area and Density:** Pearson is almost zero (-0.06), but Spearman is **-0.58**. Larger countries tend to be less densely populated.
+* **Growth Rate:** its relationships with the other variables are weak under both methods, so strong claims about growth rate should be avoided.
+
+**Why the two methods disagree.** Pearson measures *straight-line* association and is dominated by a handful of extreme observations (China, Russia, and city-states such as Macau, Singapore and Monaco). Spearman ranks the countries first, so extreme values lose their leverage. The relationships are real but **monotonic rather than linear**. This validates the earlier decision to retain the outliers and report both coefficients.
+
+As always, correlation does not imply causation: a larger territory simply permits a larger population.
+
+## Part 2: Merging population and CO2 data
+
+The task asks for a merge on country name. Because names differ between sources, the merge uses the three-letter code, and the join keys are **audited** before and after.
+
+### Preparing the two inputs
+
+```{r merge-inputs}
+# CO2: keep the key, the country name (for readable audits) and the 2019 value
+co2_2019 <- co2_emissions %>%
+  select(country_code, co2_country = `Country Name`, co2_2019 = `2019`)
+
+# Population: a function so the same preparation can be repeated after a fix
+make_pop_2022 <- function(df) {
+  df %>%
+    select(CCA3, country = `Country/Territory`, Continent,
+           population_2022 = `2022 Population`)
+}
+pop_2022 <- make_pop_2022(world_population)
+```
+
+### Key audit before merging
+
+```{r audit-before}
+pop_only_before <- anti_join(pop_2022, co2_2019, by = c("CCA3" = "country_code"))$country
+co2_only_before <- anti_join(co2_2019, pop_2022, by = c("country_code" = "CCA3"))
+
+cat("In population data only:", length(pop_only_before), "\n")
+print(pop_only_before)
+cat("\nIn CO2 data only:", nrow(co2_only_before), "\n")
+print(co2_only_before)
+```
+
+Most unmatched population entries are small territories and dependencies that the World Bank CO2 data does not report (for example Anguilla, Jersey, Taiwan, Vatican City), so excluding them is expected. The single CO2-only code, `MNP`, is suspicious: "Northern Mariana Islands" appears in the population-only list, so the two are probably the same place under different codes.
+
+### Diagnosing the mismatch
+
+```{r diagnose-mnp}
+# Code used for the Northern Mariana Islands in each dataset
+world_population %>%
+  filter(`Country/Territory` == "Northern Mariana Islands") %>%
+  select(CCA3, `Country/Territory`)
+
+co2_emissions %>%
+  filter(country_code == "MNP") %>%
+  select(`Country Name`, country_code, `2019`)
+```
+
+The population file labels the Northern Mariana Islands as `NFK`, which is the code of *Norfolk Island*. Before correcting it, verify that the fix cannot create a false match: Norfolk Island must be absent from the population data, and `NFK` absent from the CO2 data.
+
+```{r diagnose-nfk}
+# Is Norfolk Island present in the population data?
+world_population %>%
+  filter(`Country/Territory` %in% c("Norfolk Island", "Northern Mariana Islands")) %>%
+  select(CCA3, `Country/Territory`)
+
+# Does the CO2 data contain the code NFK?
+co2_emissions %>%
+  filter(country_code == "NFK") %>%
+  select(`Country Name`, country_code, `2019`)
+```
+
+Both checks confirm that the correction is safe. `case_when()` changes the code for this one country only and leaves every other row unchanged.
+
+```{r fix-mnp}
+world_population <- world_population %>%
+  mutate(CCA3 = case_when(
+    `Country/Territory` == "Northern Mariana Islands" ~ "MNP",
+    TRUE ~ CCA3
+  ))
+
+# Rebuild the population input with the corrected key
+pop_2022 <- make_pop_2022(world_population)
+```
+
+### Merge and key audit after the correction
+
+An inner join keeps only countries present in both datasets.
+
+```{r merge}
+merged_data <- pop_2022 %>%
+  inner_join(co2_2019, by = c("CCA3" = "country_code"))
+
+pop_only_after <- anti_join(pop_2022, co2_2019, by = c("CCA3" = "country_code"))$country
+co2_only_after <- anti_join(co2_2019, pop_2022, by = c("country_code" = "CCA3"))$country_code
+
+cat("Countries matched:                ", nrow(merged_data), "\n")
+cat("Population-only territories:      ", length(pop_only_after), "\n")
+cat("CO2-only codes:                   ", length(co2_only_after), "\n")
+cat("Matched but 2019 CO2 value is NA: ", sum(is.na(merged_data$co2_2019)), "\n")
+```
+
+### Handling missing CO2 values
+
+Some matched countries have no reported 2019 CO2 value. They are listed below, largest populations first.
+
+```{r missing-co2}
+merged_data %>%
+  filter(is.na(co2_2019)) %>%
+  select(country, Continent, population_2022) %>%
+  arrange(desc(population_2022)) %>%
+  kable(format.args = list(big.mark = ","),
+        caption = "Matched countries without a 2019 CO2 value")
+```
+
+**Decision.** These countries are excluded from the CO2 analysis (complete-case analysis) rather than imputed: they are mostly small territories, the values are genuinely unreported, and any filled-in value would be invented. The full merged table is kept intact, and a separate analysis dataset is created.
+
+```{r merged-complete}
+merged_complete <- merged_data %>%
+  filter(!is.na(co2_2019))
+
+cat("Countries in the analysis dataset:", nrow(merged_complete), "\n")
+```
+
+### Relationship between population and CO2 per capita
+
+**Correlation.**
+
+```{r cor-population-co2}
+pearson_pc  <- cor(merged_complete$population_2022, merged_complete$co2_2019,
+                   method = "pearson")
+spearman_pc <- cor(merged_complete$population_2022, merged_complete$co2_2019,
+                   method = "spearman")
+
+cat("Pearson r:   ", round(pearson_pc, 3), "\n")
+cat("Spearman rho:", round(spearman_pc, 3), "\n")
+```
+
+**Scatter plot.** Population spans several orders of magnitude (from thousands to over a billion), so both axes use a log scale. The red line is a linear fit with its confidence band.
+
+```{r scatter-population-co2}
+ggplot(merged_complete, aes(x = population_2022, y = co2_2019)) +
+  geom_point(alpha = 0.6, colour = "steelblue") +
+  geom_smooth(method = "lm", formula = y ~ x, colour = "firebrick") +
+  scale_x_log10() +
+  scale_y_log10() +
+  labs(title    = "Population (2022) vs CO2 emissions per capita (2019)",
+       subtitle = "Both axes on a log scale",
+       x = "Population, 2022 (log scale)",
+       y = "CO2 emissions (metric tons per capita, log scale)")
+```
+
+**Regression.** A log-log model is fitted: $\log_{10}(\text{CO2 per capita}) = \beta_0 + \beta_1 \log_{10}(\text{population})$.
+
+```{r regression}
+co2_model <- lm(log10(co2_2019) ~ log10(population_2022), data = merged_complete)
+summary(co2_model)
+```
+
+```{r regression-values, include=FALSE}
+# Extract key values so the narrative below stays in sync with the output
+model_coef <- summary(co2_model)$coefficients
+slope      <- model_coef[2, "Estimate"]
+slope_p    <- model_coef[2, "Pr(>|t|)"]
+r_squared  <- summary(co2_model)$r.squared
+```
+
+**Interpretation.**
+
+* Pearson r = **`r round(pearson_pc, 3)`** and Spearman rho = **`r round(spearman_pc, 3)`**: essentially no association between population size and per-person emissions.
+* The regression slope is **`r round(slope, 3)`** (p = `r round(slope_p, 3)`) and $R^2$ = **`r round(r_squared, 3)`**: population explains under 2% of the variation, and the slope is not significant at the 5% level. A tenfold larger population corresponds to only about `r round((1 - 10^slope) * 100)`% lower emissions per person, which is within noise.
+* The scatter plot shows the same picture: countries of similar population size range from about 0.05 to 20 tons per person.
+* **Conclusion.** Population size does not explain per-person emissions. These are driven by other factors such as income, energy mix and industrial structure, which are not in these datasets.
+
+### Extra analysis: population versus *total* emissions
+
+Because CO2 is expressed per capita, the weak result above is almost by construction. A new variable, total emissions, gives a more informative comparison (the task lists "creating new variables from existing ones" as an objective):
+
+$$\text{total CO2 (metric tons)} = \text{CO2 per capita (2019)} \times \text{population (2022)}$$
+
+```{r total-co2}
+# Approximation: 2019 emissions combined with 2022 population
+merged_complete <- merged_complete %>%
+  mutate(total_co2 = co2_2019 * population_2022)
+
+pearson_total  <- cor(merged_complete$population_2022, merged_complete$total_co2,
+                      method = "pearson")
+spearman_total <- cor(merged_complete$population_2022, merged_complete$total_co2,
+                      method = "spearman")
+
+comparison <- tibble(
+  `CO2 measure`    = c("Per capita", "Total"),
+  Pearson          = c(pearson_pc,  pearson_total),
+  Spearman         = c(spearman_pc, spearman_total)
+)
+kable(comparison, digits = 3,
+      caption = "Correlation of population with CO2 per capita versus total CO2")
+```
+
+```{r scatter-total-co2}
+ggplot(merged_complete, aes(x = population_2022, y = total_co2)) +
+  geom_point(alpha = 0.6, colour = "steelblue") +
+  geom_smooth(method = "lm", formula = y ~ x, colour = "firebrick") +
+  scale_x_log10() +
+  scale_y_log10() +
+  labs(title    = "Population (2022) vs total CO2 emissions",
+       subtitle = "Both axes on a log scale; total = per capita (2019) x population (2022)",
+       x = "Population, 2022 (log scale)",
+       y = "Total CO2 (metric tons, log scale)")
+```
+
+**Interpretation.** Population is strongly related to **total** emissions (Pearson **`r round(pearson_total, 3)`**, Spearman **`r round(spearman_total, 3)`**) but not to **per-person** emissions. More people produce more emissions in total, but a larger country does not mean each person emits more.
+
+*Caveat:* total CO2 is built from population, so population appears on both sides of the comparison and part of this correlation is mechanical. It also mixes two different years. It is therefore presented as a clearly labelled supplementary analysis.
+
+---
+
+# Task 4.6: CO2 Emissions by Continent
+
+## Method A: sum of per-capita values (as specified in the task)
+
+The task asks to sum the 2019 CO2 values by continent and report them in metric tons per capita. `group_by()` splits the data by continent and `summarise()` collapses each group to one row; `n()` records how many countries contribute to each sum.
+
+```{r continent-sum}
+continent_co2 <- merged_complete %>%
+  group_by(Continent) %>%
+  summarise(countries          = n(),
+            sum_co2_per_capita = sum(co2_2019),
+            .groups = "drop") %>%
+  arrange(desc(sum_co2_per_capita))
+
+kable(continent_co2, digits = 1,
+      caption = "Sum of 2019 CO2 per capita by continent (Method A)")
+```
+
+```{r plot-continent}
+ggplot(continent_co2,
+       aes(x = reorder(Continent, sum_co2_per_capita),
+           y = sum_co2_per_capita)) +
+  geom_col(fill = "steelblue") +
+  geom_text(aes(label = round(sum_co2_per_capita, 1)), hjust = -0.1) +
+  coord_flip() +
+  expand_limits(y = max(continent_co2$sum_co2_per_capita) * 1.1) +  # room for labels
+  labs(title    = "Sum of 2019 CO2 emissions per capita by continent",
+       subtitle = "Sum of country values (metric tons per capita)",
+       x = NULL,
+       y = "Sum of CO2 per capita (metric tons)")
+```
+
+## Answers to the three questions
+
+```{r continent-answers}
+first_continent <- continent_co2 %>% slice(1)
+third_continent <- continent_co2 %>% slice(3)
+last_continent  <- continent_co2 %>% slice_tail(n = 1)
+```
+
+1. **First continent with the highest 2019 CO2 emission:** **`r first_continent$Continent`** (`r round(first_continent$sum_co2_per_capita, 1)` metric tons per capita).
+2. **Third continent:** **`r third_continent$Continent`**, with a total of **`r round(third_continent$sum_co2_per_capita, 1)` metric tons per capita**.
+3. **Last continent:** **`r last_continent$Continent`**, with a total of **`r round(last_continent$sum_co2_per_capita, 1)` metric tons per capita**.
+
+## Method B: a more meaningful measure (supplementary)
+
+Adding per-capita values favours continents with **many countries** (Africa has 54, Oceania only 14), which is a statistical weakness of Method A. Two alternatives avoid this: **total emissions in tons** (per-capita values multiplied by population) and the **population-weighted average per capita** (total emissions divided by total population).
+
+```{r continent-weighted}
+continent_co2_weighted <- merged_complete %>%
+  group_by(Continent) %>%
+  summarise(total_co2_tons      = sum(total_co2),
+            total_population    = sum(population_2022),
+            weighted_per_capita = total_co2_tons / total_population,
+            .groups = "drop") %>%
+  arrange(desc(total_co2_tons))
+
+kable(continent_co2_weighted, digits = 2,
+      format.args = list(big.mark = ","),
+      caption = "Total and population-weighted CO2 by continent (Method B)")
+```
+
+**Comparison of the two methods.**
+
+* **Asia** ranks first under both methods.
+* **Europe and North America swap** second and third place.
+* **South America and Oceania swap** the last two places. Oceania has the lowest total in tons, yet its people emit about 10 tons each, one of the highest rates; Method A hides this because Oceania has few countries.
+* **Africa** has by far the lowest per-person emissions (about 1 ton).
+
+---
+
+# Conclusions
+
+1. **Data quality.** The population dataset has no duplicates and no missing values. The CO2 file had a duplicated 2019 column (verified identical, then removed). A mislabelled country code (`NFK` instead of `MNP` for the Northern Mariana Islands) was found through a join audit and corrected.
+2. **Outliers.** Numerous outliers were detected but retained because they are genuine values; log scales and rank correlation limit their influence.
+3. **Projection.** Under constant 2022 growth rates the world population rises from `r format(total_2022, big.mark = ",")` to `r format(total_2030, big.mark = ",")` by 2030 (+`r pct_change`%).
+4. **Trends.** Among the ten most populous countries, India is closing the gap with China; the United States leads in per-person CO2 but is declining, while China's per-person emissions have risen about fourfold.
+5. **Correlation.** Pearson hides relationships that Spearman reveals (for example Area vs World Population Percentage: 0.45 versus 0.84).
+6. **Population and CO2.** Population size is unrelated to per-person emissions (r = `r round(pearson_pc, 3)`, $R^2$ = `r round(r_squared, 3)`) but strongly related to total emissions (r = `r round(pearson_total, 3)`).
+7. **Continents.** Asia has the highest CO2 emissions under both methods; the ranking of the other continents depends on whether per-capita values are summed or weighted by population.
+
+## Limitations
+
+* The CO2 variable is **per capita**; summing it across countries (Method A) is statistically questionable and depends on the number of countries in each continent.
+* Total emissions combine **2019 emissions with 2022 population**, which is an approximation.
+* Population data are available only for **selected years**; trend lines interpolate between them.
+* The 2030 projection assumes **constant growth** and is unrealistic for countries whose 2022 growth rate reflects a one-off event (Ukraine, Poland, Moldova).
+* Countries with no 2019 CO2 value (small territories) were excluded, so continent totals are slightly understated.
+* Correlation does not imply causation, and no explanatory variables such as income or energy mix were available.
+
+---
+
+# Session Information
+
+Recorded for reproducibility (R version and package versions used to produce this report).
+
+```{r session-info}
+sessionInfo()
+```

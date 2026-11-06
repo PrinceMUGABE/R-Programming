@@ -1,0 +1,154 @@
+\documentclass[11pt,a4paper]{article}
+
+% ---------- Packages ----------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{times}
+\usepackage[top=1.9cm,bottom=1.9cm,left=2cm,right=2cm]{geometry}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage[labelfont=bf,font=small,skip=3pt]{caption}
+\usepackage[colorlinks=true,linkcolor=black,urlcolor=blue]{hyperref}
+\usepackage{titlesec}
+
+% ---------- Layout tuning to respect the 3-page limit ----------
+\setlist{nosep,leftmargin=1.4em}
+\titlespacing*{\section}{0pt}{7pt}{3pt}
+\titleformat{\section}{\large\bfseries}{\thesection}{0.6em}{}
+\setlength{\parskip}{2pt}
+\setlength{\parindent}{0pt}
+\renewcommand{\arraystretch}{1.08}
+
+% ---------- Title ----------
+\title{\vspace{-1.2cm}\textbf{Population Size and CO$_2$ Emissions: \\ An Exploratory and Correlation Analysis}}
+\author{Prince Mugabe - 20252MBI025}
+\date{\today}
+
+\begin{document}
+	\maketitle
+	\vspace{-0.9cm}
+	
+	% ================= ABSTRACT =================
+	\begin{abstract}
+		\noindent
+		This study examines the relationship between population and carbon dioxide (CO$_2$) emissions using two public datasets: the World Population Dataset (234 countries and territories, 1970--2022) and World Bank CO$_2$ emissions in metric tons per capita (1990--2019). The analysis, carried out in R, covered cleaning, exploration, a 2030 projection, trend visualisation, correlation, regression and a continental comparison. The data contained no duplicates or missing values; numerous outliers were retained because they are genuine observations. Assuming constant 2022 growth rates, the world population rises from about 7.97 to 8.56 billion by 2030 ($+7.38\%$). Pearson correlation understated relationships among area, density and population share, which Spearman rank correlation revealed (for example, area versus world population share: 0.45 versus 0.84). After merging the datasets on country codes, which also exposed and corrected a mislabelled code, population size showed no meaningful relationship with per-capita emissions (Pearson $r=0.014$, $R^2=0.018$), but a strong one with total emissions ($r=0.811$). Asia ranked first in 2019 emissions under both summation and population-weighted methods, although the ranking of the remaining continents depended on the method. Per-person emissions are therefore driven by factors other than headcount.
+		
+	\end{abstract}
+	
+	% ================= INTRODUCTION =================
+	\section{Introduction}
+	Population growth is often linked to rising environmental pressure, yet the link between the number of people in a country and the carbon they emit is not obvious: a populous country may have modest emissions per person, while a small one may have very high ones. This project investigates that question empirically. Its objectives are to prepare and explore two public datasets, derive new variables (a 2030 projection and total emissions), visualise trends, and quantify the relationship between population and CO$_2$ emissions through correlation, regression and a continental comparison.
+	
+	% ================= METHODS =================
+	\section{Methods}
+	\subsection*{Datasets}
+	\textbf{World Population Dataset} (Kaggle): 234 rows and 17 variables, including country, continent, population for 1970--2022 (eight reference years), area (km$^2$), density, annual growth rate (a yearly multiplier, e.g.\ 1.0257) and share of world population. \textbf{CO$_2$ Emissions Around the World} (Kaggle, World Bank indicator): 215 countries, with CO$_2$ emissions in \emph{metric tons per capita} for each year from 1990 to 2019. The emissions file contained 2019 twice; the identical duplicate was removed.
+	
+	\subsection*{Procedures}
+	All work was done in R (\textit{tidyverse}). Duplicates, missing values and outliers (box plots, $1.5\times$IQR rule) were checked systematically. The 2030 projection used continuous growth,
+	\begin{equation}
+		N_t = P\,e^{rt}, \qquad r=\ln(\text{Growth Rate}),
+	\end{equation}
+	with $P$ the 2022 population and $t=8$. The growth-rate column holds multipliers, hence the logarithm. Relationships were measured with Pearson (linear) and Spearman (rank-based) coefficients, shown as heatmaps, and with a log--log linear regression. The datasets were merged on the three-letter country code rather than on names, which differ between sources. Countries without a 2019 value were excluded (complete cases).
+	
+	% ================= RESULTS =================
+	\section{Results}
+	\subsection*{4.2 Exploratory analysis}
+	No duplicate rows and no missing values (including blank text cells) were found. Outliers were frequent: 25--32 per population column, 28 for area, 22 for density, 25 for population share and 3 for growth rate. They are real values (China, India, Russia, city-states such as Macau); the three growth-rate outliers (Moldova 1.07, Poland 1.04, Ukraine 0.912) match 2022 refugee movements. All were retained, and their influence was limited through log scales and rank correlation.
+	
+	\subsection*{4.3 Projection to 2030}
+	The world total grows from 7,973,413,042 (2022) to 8,561,775,261 (2030), an increase of 7.38\% (about 0.9\% per year). India reaches about 1.50 billion and Russia shrinks slightly; China's growth rate is 1.0000, so its projection is unchanged. Ukraine's projection (about 19.0 million, half of 2022) extrapolates a one-off shock and is not a realistic forecast.
+	
+	\subsection*{4.4 Top ten countries and trends}
+	Table~\ref{tab:top10} lists the ten most populous countries in 2022; China and India each exceed 1.4 billion people. Between 1990 and 2022 all ten grew except Russia, which stayed roughly flat; Nigeria and Pakistan grew fastest in relative terms, and India nearly closed the gap with China. CO$_2$ per capita (1990--2019) was highest in the United States (about 19--20 tons around 2000, falling to about 15 by 2019). Russia fell from about 14.5 to 10 tons in the 1990s and partly recovered; China's rose about fourfold to over 7.5 tons.
+	
+	\begin{table}[ht]
+		\centering
+		\small
+		\caption{Ten most populous countries, 2022, with projected 2030 population (millions).}
+		\label{tab:top10}
+		\begin{tabular}{lrr@{\hspace{2em}}lrr}
+			\toprule
+			Country & 2022 & 2030 & Country & 2022 & 2030 \\
+			\midrule
+			China         & 1425.9 & 1425.9 & Nigeria    & 218.5 & 264.4 \\
+			India         & 1417.2 & 1496.1 & Brazil     & 215.3 & 223.4 \\
+			United States & 338.3  & 348.7  & Bangladesh & 171.2 & 186.5 \\
+			Indonesia     & 275.5  & 289.9  & Russia     & 144.7 & 141.6 \\
+			Pakistan      & 235.8  & 274.4  & Mexico     & 127.5 & 134.1 \\
+			\bottomrule
+		\end{tabular}
+	\end{table}
+	
+	\subsection*{4.5 Correlation analysis}
+	Pearson coefficients were close to zero for almost all pairs of area, density, growth rate and population share, whereas Spearman coefficients revealed monotonic relationships (Table~\ref{tab:cor}). The extreme values (China, Russia, city-states) dominate a linear fit, which is why Pearson understates them.
+	
+	\begin{table}[ht]
+		\centering
+		\small
+		\caption{Pearson and Spearman correlations between selected population variables.}
+		\label{tab:cor}
+		\begin{tabular}{lrr}
+			\toprule
+			Pair & Pearson & Spearman \\
+			\midrule
+			Area vs.\ world population share & 0.45 & 0.84 \\
+			Area vs.\ density                 & $-0.06$ & $-0.58$ \\
+			Area vs.\ growth rate             & $-0.01$ & 0.36 \\
+			Growth rate vs.\ world share      & $-0.02$ & 0.28 \\
+			Density vs.\ growth rate          & $-0.07$ & $-0.22$ \\
+			Density vs.\ world share          & $-0.03$ & $-0.15$ \\
+			\bottomrule
+		\end{tabular}
+	\end{table}
+	
+	The merge on country codes matched 215 countries. It exposed a data error: the Northern Mariana Islands carried the code \textit{NFK} (Norfolk Island's code) instead of \textit{MNP}; this was corrected after checking that no false match could result. Nineteen small territories had no CO$_2$ data, and 24 matched countries lacked a 2019 value, leaving 191 countries for analysis. Population (2022) and CO$_2$ per capita (2019) were essentially unrelated: Pearson $r=0.014$, Spearman $\rho=-0.110$, and a log--log regression slope of $-0.087$ ($p=0.063$, $R^2=0.018$). For the derived variable total CO$_2$ (per-capita emissions $\times$ population), the association was strong: Pearson $0.811$, Spearman $0.751$.
+	
+	\subsection*{4.6 Emissions by continent}
+	Summing 2019 per-capita values by continent, as specified, gave the ranking in Table~\ref{tab:cont}. The first continent is \textbf{Asia} (290.5), the third is \textbf{North America} (96.9 metric tons per capita) and the last is \textbf{South America} (33.4 metric tons per capita). Because this sum depends on the number of countries in a continent, a second measure was computed: total emissions and the population-weighted average per capita. Asia remains first, but Europe and North America swap places, and Oceania, last in total tons, has one of the highest per-person levels (about 10 tons).
+	
+	\begin{table}[ht]
+		\centering
+		\small
+		\caption{2019 CO$_2$ by continent: sum of per-capita values (Method A) and population-weighted measures (Method B).}
+		\label{tab:cont}
+		\begin{tabular}{lrrrr}
+			\toprule
+			Continent & Countries & Sum per capita (A) & Total (billion t) & Weighted per capita (B) \\
+			\midrule
+			Asia          & 46 & 290.5 & 20.25 & 4.32 \\
+			Europe        & 42 & 246.7 & 5.18  & 6.97 \\
+			North America & 23 & 96.9  & 6.16  & 10.4 \\
+			Africa        & 54 & 63.7  & 1.49  & 1.04 \\
+			Oceania       & 14 & 54.8  & 0.45  & 10.1 \\
+			South America & 12 & 33.4  & 1.05  & 2.40 \\
+			\bottomrule
+		\end{tabular}
+	\end{table}
+	
+	% ================= DISCUSSION =================
+	\section{Discussion}
+	The central finding is that population size explains almost none of the variation in per-person emissions, whereas it is strongly associated with total emissions. The second result is partly mechanical, since total emissions are built from population, and it combines 2019 emissions with 2022 population. Per-person emissions are likely driven by income, energy mix and industrial structure, none of which were available in the datasets. The Pearson--Spearman contrast shows that heavy-tailed variables can hide genuine relationships from linear methods, supporting the decision to retain outliers. The continental analysis shows that the same data can yield different rankings depending on the summary: summing per-capita values favours continents with many countries (Africa, 54) and hides the high per-person emissions of Oceania. Correlation does not imply causation, and the 2030 projection assumes constant growth, which is unrealistic where 2022 growth reflected one-off events.
+	
+	% ================= LESSONS =================
+	\section{Lessons Learned and Recommendations}
+	\textbf{Lessons learned.}
+	\begin{itemize}
+		\item Audit merge keys before and after joining: a single mislabelled code would otherwise have silently dropped a country, and key audits are more reliable than matching on names.
+		\item Check what a variable measures before aggregating it: per-capita values should not be summed without weighting.
+		\item Inspect outliers before removing them; here they were real and informative.
+		\item Report rank-based and linear correlations together when distributions are skewed.
+	\end{itemize}
+	\textbf{Recommendations.}
+	\begin{itemize}
+		\item Use total or population-weighted emissions for continental comparisons, and keep per-capita values for comparing individual countries.
+		\item Extend the analysis with income, energy-mix and industry variables, and with multiple regression, to explain per-person emissions.
+		\item Use time-varying growth rates or scenario-based projections instead of a constant rate, and align the years of the population and emission data.
+	\end{itemize}
+	
+	% ================= CONCLUSION =================
+	\section{Conclusion}
+	After cleaning and merging two public datasets, the analysis found no meaningful relationship between a country's population size and its CO$_2$ emissions per person, but a strong relationship with its total emissions. Population is projected to grow by 7.38\% by 2030 under constant growth, Asia leads 2019 emissions on every measure used, and the ranking of other continents is sensitive to the method chosen. Careful outlier handling, rank-based correlation and verified merging were essential for reliable conclusions.
+	
+\end{document}
